@@ -1,0 +1,174 @@
+# Dependencies and Setup
+import matplotlib.pyplot as plt
+import pandas as pd
+import scipy.stats as st
+from scipy.stats import linregress
+import numpy as np
+
+# Study data files
+mouse_metadata_path = "data/Mouse_metadata.csv"
+study_results_path = "data/Study_results.csv"
+
+# Read the mouse data and the study results
+mouse_metadata = pd.read_csv(mouse_metadata_path)
+study_results = pd.read_csv(study_results_path)
+
+# Combine the data into a single DataFrame
+pharma_complete = pd.merge(study_results, mouse_metadata, on=["Mouse ID", "Mouse ID"])
+
+# Display the data table for preview
+pharma_complete.head()
+
+# Checking the number of mice.
+mouse_count = len(pharma_complete["Mouse ID"].unique())
+mouse_count
+
+# Our data should be uniquely identified by Mouse ID and Timepoint
+# Get the duplicate mice by ID number that shows up for Mouse ID and Timepoint. 
+duplicate = pharma_complete.loc[pharma_complete.duplicated(subset=["Mouse ID", "Timepoint"]), "Mouse ID"].unique()
+duplicate
+
+# Optional: Get all the data for the duplicate mouse ID. 
+mouse_dup = pharma_complete[pharma_complete["Mouse ID"]=='g989']
+mouse_dup
+
+# Create a clean DataFrame by dropping the duplicate mouse by its ID.
+clean_df = pharma_complete.drop(pharma_complete[pharma_complete["Mouse ID"]=='g989'].index)
+clean_df
+
+# Checking the number of mice in the clean DataFrame.
+mouse_count = len(clean_df["Mouse ID"].unique())
+mouse_count
+
+# Generate a summary statistics table of mean, median, variance, standard deviation, and SEM of the tumor volume for each regimen
+tumor_volume = clean_df.groupby("Drug Regimen")["Tumor Volume (mm3)"]
+mean = tumor_volume.mean()
+median = tumor_volume.median()
+variance = tumor_volume.var()
+std = tumor_volume.std()
+sem = tumor_volume.sem()
+# Use groupby and summary statistical methods to calculate the following properties of each drug regimen: 
+# mean, median, variance, standard deviation, and SEM of the tumor volume. 
+# Assemble the resulting series into a single summary DataFrame.
+tumor_volume_combined = pd.DataFrame({"Drug Regimen":mean.index,"Mean Tumor Volume":mean.values, 
+                                      "Median Tumor Volume":median.values,"Tumor Volume Variance":variance.values,
+                                    "Tumor Volume Std. Dev.":std.values,"Tumor Volume Std. Err.":sem.values})
+
+tumor_volume_data = tumor_volume_combined.set_index("Drug Regimen")
+tumor_volume_data
+
+# A more advanced method to generate a summary statistics table of mean, median, variance, standard deviation,
+# and SEM of the tumor volume for each regimen (only one method is required in the solution)
+# Using the aggregation method, produce the same summary statistics in a single line
+tumor_volume_data_agg = clean_df.groupby("Drug Regimen")["Tumor Volume (mm3)"].agg(["mean", "median","var", "std", "sem"])
+tumor_volume_data_agg
+
+# Generate a bar plot showing the total number of rows (Mouse ID/Timepoints) for each drug regimen using Pandas.
+regimen_counts = clean_df['Drug Regimen'].value_counts()
+regimen_counts.plot(kind='bar', figsize=(6, 5))
+plt.xlabel("Drug Regimen")
+plt.ylabel("Number of Observed Mouse Timpoints")
+plt.show()
+
+# Generate a bar plot showing the total number of rows (Mouse ID/Timepoints) for each drug regimen using pyplot.
+regimen_counts = clean_df['Drug Regimen'].value_counts()
+
+drug_regimens = regimen_counts.index
+counts = regimen_counts.values
+plt.figure(figsize=(7, 5))
+plt.bar(drug_regimens, counts)
+plt.xlabel('Drug Regimen')
+plt.ylabel('Number of Observed Mouse Timpoints')
+plt.xticks(rotation=90)
+plt.show()
+
+# Generate a pie plot showing the distribution of female versus male mice using Pandas
+sex_counts = clean_df['Sex'].value_counts()
+sex_counts.plot(kind='pie', autopct='%1.1f%%', startangle=0, colors=['steelblue', 'darkorange'], figsize=(5, 5))
+plt.title('Sex', rotation=90, loc='left')
+plt.show()
+
+# Generate a pie plot showing the distribution of female versus male mice using pyplot
+sex_counts = clean_df['Sex'].value_counts()
+sex = sex_counts.index
+counts = sex_counts.values
+plt.figure(figsize=(5, 5))
+plt.pie(counts, labels=sex, autopct='%1.1f%%', startangle=0, colors=['steelblue', 'darkorange'])
+plt.title('Sex',rotation=90, loc="left")
+plt.show()
+
+# Calculate the final tumor volume of each mouse across four of the treatment regimens:  
+# Capomulin, Ramicane, Infubinol, and Ceftamin
+# Start by getting the last (greatest) timepoint for each mouse
+
+selected_regimens = ['Capomulin', 'Ramicane', 'Infubinol', 'Ceftamin']
+
+# Create an empty list to store tumor volume data for each regimen
+tumor_volume_data = []
+
+# Loop through the selected regimens
+for regimen in selected_regimens:
+# Put treatments into a list for for loop (and later for plot labels)
+# Create empty list to fill with tumor vol data (for plotting)
+# Calculate the IQR and quantitatively determine if there are any potential outliers. 
+    # Locate the rows which contain mice on each drug and get the tumor volumes
+    # add subset 
+    # Determine outliers using upper and lower bounds
+    regimen_data = clean_df[clean_df['Drug Regimen'] == regimen]
+    max_timepoints = regimen_data.groupby('Mouse ID')['Timepoint'].max().reset_index()
+    merged_data = pd.merge(regimen_data, max_timepoints, on=['Mouse ID', 'Timepoint'], how='right')
+    tumor_volume = merged_data['Tumor Volume (mm3)']
+    tumor_volume_data.append(tumor_volume)
+    quartiles = tumor_volume.quantile([0.25, 0.75])
+    lower_quartile = quartiles[0.25]
+    upper_quartile = quartiles[0.75]
+    iqr = upper_quartile - lower_quartile
+    lower_bound = lower_quartile - 1.5 * iqr
+    upper_bound = upper_quartile + 1.5 * iqr
+    outliers = tumor_volume.loc[(tumor_volume < lower_bound) | (tumor_volume > upper_bound)]
+    print(f"{regimen}\'s potential outliers: {outliers}")
+
+# Generate a box plot that shows the distrubution of the tumor volume for each treatment group.
+plt.figure(figsize=(6, 5))
+plt.boxplot(tumor_volume_data, labels=selected_regimens, flierprops={'marker': 'o', 'markerfacecolor': 'red', 'markersize':12})
+plt.ylabel('Final Tumor Volume (mm3)')
+plt.show()
+
+# Generate a line plot of tumor volume vs. time point for a single mouse treated with Capomulin
+capomulin_df = clean_df[clean_df['Drug Regimen'] == 'Capomulin']
+selected_mouse = 'l509'
+mouse_data = capomulin_df.loc[capomulin_df['Mouse ID'] == selected_mouse]
+plt.figure(figsize=(6, 5))
+plt.plot(mouse_data['Timepoint'], mouse_data['Tumor Volume (mm3)'], linestyle='-', color='royalblue')
+plt.title(f'Capomulin treatment of mouse {selected_mouse}')
+plt.xlabel('Time Point')
+plt.ylabel('Tumor Volume (mm3)')
+plt.show()
+
+# Generate a scatter plot of mouse weight vs. the average observed tumor volume for the entire Capomulin regimen
+capomulin_df = clean_df[clean_df['Drug Regimen'] == 'Capomulin']
+average_tumor_volume = capomulin_df.groupby('Mouse ID')['Tumor Volume (mm3)'].mean().reset_index()
+weight_vs_tumor_volume = pd.merge(average_tumor_volume, capomulin_df[['Mouse ID', 'Weight (g)']], on='Mouse ID')
+weight_vs_tumor_volume = weight_vs_tumor_volume.drop_duplicates(subset='Mouse ID').reset_index()
+plt.figure(figsize=(6, 5))
+plt.scatter(weight_vs_tumor_volume['Weight (g)'], weight_vs_tumor_volume['Tumor Volume (mm3)'], marker='o', color='royalblue')
+plt.xlabel('Weight (g)')
+plt.ylabel('Average Tumor Volume (mm3)')
+plt.show()
+
+# Calculate the correlation coefficient and a linear regression model 
+# for mouse weight and average observed tumor volume for the entire Capomulin regimen
+linreg_weight = weight_vs_tumor_volume['Weight (g)']
+linreg_volume = average_tumor_volume['Tumor Volume (mm3)']
+slope, intercept, rvalue, pvalue, stderr = linregress(linreg_weight, linreg_volume)
+regress_values = linreg_weight * slope + intercept
+line_eq = "y = " + str(round(slope,2)) + "x + " + str(round(intercept,2))
+correlation = st.pearsonr(linreg_weight,linreg_volume)
+plt.figure(figsize=(6, 5))
+plt.scatter(linreg_weight, weight_vs_tumor_volume['Tumor Volume (mm3)'], marker='o', color='royalblue')
+plt.plot(linreg_weight,regress_values,"r-")
+plt.annotate(line_eq,(5.8,0.8),fontsize=15,color="red")
+plt.xlabel('Weight (g)')
+plt.ylabel('Average Tumor Volume (mm3)')
+print(f'The correlation between mouse weight and the average tumor volume is {round(correlation[0], 2)}')
+plt.show()
